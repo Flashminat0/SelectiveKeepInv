@@ -52,29 +52,26 @@ public class DeathMessageStoreTest {
     }
 
     // ---------------------------------------------------------------------
-    // writeDefaultsToFile + round-trip
+    // writeDefaultsToFile + round-trip — every line must come back identical
     // ---------------------------------------------------------------------
 
-    @Test public void writeAndReadBackRoundTrips() throws Exception {
+    @Test public void writeAndReadBackRoundTripsExactly() throws Exception {
         File f = freshFile("death-msgs.yml");
         DeathMessageStore.writeDefaultsToFile(f);
         assertTrue(f.exists());
 
         DeathMessageStore loaded = DeathMessageStore.fromFile(f);
-        // Same lengths (content equality is not strictly required since
-        // serialization quotes and may normalize, but they should match here).
-        assertEquals(DeathMessages.ALL_LINES.length,         loaded.allLines.length);
-        assertEquals(DeathMessages.ALL_LINES_WITH_XP.length, loaded.allLinesWithXp.length);
-        assertEquals(DeathMessages.ALL_LINES_NO_XP.length,   loaded.allLinesNoXp.length);
-        assertEquals(DeathMessages.SAME_DIM_LINES.length,    loaded.sameDimLines.length);
-        assertEquals(DeathMessages.DIFF_DIM_LINES.length,    loaded.diffDimLines.length);
-        assertEquals(DeathMessages.XP_ROLL_LUCKY.length,     loaded.xpRollLucky.length);
-        assertEquals(DeathMessages.XP_ROLL_MID.length,       loaded.xpRollMid.length);
-        assertEquals(DeathMessages.XP_ROLL_BRUTAL.length,    loaded.xpRollBrutal.length);
 
-        // Spot-check one specific line survives the round-trip
-        assertTrue(java.util.Arrays.asList(loaded.allLines)
-                .contains(DeathMessages.ALL_LINES[0]));
+        // Strict equality on every pool. Catches quote/escape mutations or
+        // a line being silently dropped during serialization.
+        assertArrayEquals(DeathMessages.ALL_LINES,         loaded.allLines);
+        assertArrayEquals(DeathMessages.ALL_LINES_WITH_XP, loaded.allLinesWithXp);
+        assertArrayEquals(DeathMessages.ALL_LINES_NO_XP,   loaded.allLinesNoXp);
+        assertArrayEquals(DeathMessages.SAME_DIM_LINES,    loaded.sameDimLines);
+        assertArrayEquals(DeathMessages.DIFF_DIM_LINES,    loaded.diffDimLines);
+        assertArrayEquals(DeathMessages.XP_ROLL_LUCKY,     loaded.xpRollLucky);
+        assertArrayEquals(DeathMessages.XP_ROLL_MID,       loaded.xpRollMid);
+        assertArrayEquals(DeathMessages.XP_ROLL_BRUTAL,    loaded.xpRollBrutal);
     }
 
     // ---------------------------------------------------------------------
@@ -84,9 +81,17 @@ public class DeathMessageStoreTest {
     @Test(expected = DeathMessageStore.InvalidDeathMessageFile.class)
     public void missingSectionRejected() throws Exception {
         File f = freshFile("death-msgs.yml");
-        // Write a file missing xp-roll-brutal entirely
-        write(f, validYamlBody().replaceFirst(
-                "(?s)\\nxp-roll-brutal:\\n(\\s+- .*\\n)+", "\n"));
+        // Valid file with xp-roll-brutal section deliberately omitted.
+        String body =
+                "all-lines:\n  - \"a\"\n" +
+                "all-lines-with-xp:\n  - \"a\"\n" +
+                "all-lines-no-xp:\n  - \"a\"\n" +
+                "same-dim-lines:\n  - \"%s\"\n" +
+                "diff-dim-lines:\n  - \"a\"\n" +
+                "xp-roll-lucky:\n  - \"a\"\n" +
+                "xp-roll-mid:\n  - \"a\"\n";
+                // no xp-roll-brutal:
+        write(f, body);
         DeathMessageStore.fromFile(f);
     }
 
@@ -97,8 +102,17 @@ public class DeathMessageStoreTest {
     @Test(expected = DeathMessageStore.InvalidDeathMessageFile.class)
     public void emptySectionRejected() throws Exception {
         File f = freshFile("death-msgs.yml");
-        write(f, validYamlBody().replaceFirst(
-                "(?s)xp-roll-mid:\\n(\\s+- .*\\n)+", "xp-roll-mid:\n"));
+        // xp-roll-mid header present but no list items under it.
+        String body =
+                "all-lines:\n  - \"a\"\n" +
+                "all-lines-with-xp:\n  - \"a\"\n" +
+                "all-lines-no-xp:\n  - \"a\"\n" +
+                "same-dim-lines:\n  - \"%s\"\n" +
+                "diff-dim-lines:\n  - \"a\"\n" +
+                "xp-roll-lucky:\n  - \"a\"\n" +
+                "xp-roll-mid:\n" +                       // header only, no items
+                "xp-roll-brutal:\n  - \"a\"\n";
+        write(f, body);
         DeathMessageStore.fromFile(f);
     }
 
@@ -216,19 +230,68 @@ public class DeathMessageStoreTest {
     }
 
     // ---------------------------------------------------------------------
-    // helpers
+    // Parser fixes from v2.2 code review (B1, B4, S4)
     // ---------------------------------------------------------------------
 
-    /** A minimal valid body with all sections present, used as a base for
-     *  mutation tests above. */
-    private static String validYamlBody() {
-        return "all-lines:\n  - \"first\"\n" +
-               "all-lines-with-xp:\n  - \"first\"\n" +
-               "all-lines-no-xp:\n  - \"first\"\n" +
-               "same-dim-lines:\n  - \"%s blocks\"\n" +
-               "diff-dim-lines:\n  - \"first\"\n" +
-               "xp-roll-lucky:\n  - \"first\"\n" +
-               "xp-roll-mid:\n  - \"first\"\n" +
-               "xp-roll-brutal:\n  - \"first\"\n";
+    /** B1: a '#' inside a quoted string must not be treated as a comment. */
+    @Test public void hashInsideQuotedMessageSurvives() throws Exception {
+        File f = freshFile("death-msgs.yml");
+        String body =
+                "all-lines:\n  - \"hashtag #yolo\"\n" +
+                "all-lines-with-xp:\n  - \"a\"\n" +
+                "all-lines-no-xp:\n  - \"a\"\n" +
+                "same-dim-lines:\n  - \"%s\"\n" +
+                "diff-dim-lines:\n  - \"a\"\n" +
+                "xp-roll-lucky:\n  - \"a\"\n" +
+                "xp-roll-mid:\n  - \"a\"\n" +
+                "xp-roll-brutal:\n  - \"a\"\n";
+        write(f, body);
+        DeathMessageStore d = DeathMessageStore.fromFile(f);
+        assertEquals("hashtag #yolo", d.allLines[0]);
+    }
+
+    /** B4: a line that's indented but isn't a list item is a hard error. */
+    @Test(expected = DeathMessageStore.InvalidDeathMessageFile.class)
+    public void garbageLineInSectionRejected() throws Exception {
+        File f = freshFile("death-msgs.yml");
+        String body =
+                "all-lines:\n  - \"a\"\n  oops not a list item\n" +
+                "all-lines-with-xp:\n  - \"a\"\n" +
+                "all-lines-no-xp:\n  - \"a\"\n" +
+                "same-dim-lines:\n  - \"%s\"\n" +
+                "diff-dim-lines:\n  - \"a\"\n" +
+                "xp-roll-lucky:\n  - \"a\"\n" +
+                "xp-roll-mid:\n  - \"a\"\n" +
+                "xp-roll-brutal:\n  - \"a\"\n";
+        write(f, body);
+        DeathMessageStore.fromFile(f);
+    }
+
+    /** B4: a list item before any section header is a hard error. */
+    @Test(expected = DeathMessageStore.InvalidDeathMessageFile.class)
+    public void leadingListItemRejected() throws Exception {
+        File f = freshFile("death-msgs.yml");
+        String body =
+                "  - \"orphan\"\n" +
+                "all-lines:\n  - \"a\"\n";
+        write(f, body);
+        DeathMessageStore.fromFile(f);
+    }
+
+    /** S4: blank string line in a pool is rejected. */
+    @Test(expected = DeathMessageStore.InvalidDeathMessageFile.class)
+    public void blankMessageLineRejected() throws Exception {
+        File f = freshFile("death-msgs.yml");
+        String body =
+                "all-lines:\n  - \"\"\n" +
+                "all-lines-with-xp:\n  - \"a\"\n" +
+                "all-lines-no-xp:\n  - \"a\"\n" +
+                "same-dim-lines:\n  - \"%s\"\n" +
+                "diff-dim-lines:\n  - \"a\"\n" +
+                "xp-roll-lucky:\n  - \"a\"\n" +
+                "xp-roll-mid:\n  - \"a\"\n" +
+                "xp-roll-brutal:\n  - \"a\"\n";
+        write(f, body);
+        DeathMessageStore.fromFile(f);
     }
 }

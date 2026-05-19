@@ -1,5 +1,6 @@
 package com.flashminat0.selectivekeepinv;
 
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -7,16 +8,23 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.Writer;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
 /**
  * Covers {@link Config} loading, default-writing, and graceful handling of
- * partial / malformed YAML.
+ * partial / malformed YAML. Also verifies the malformed path queues a
+ * startup-error so ops see it on login.
  */
 public class ConfigTest {
 
     @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
+
+    @Before public void setUp() {
+        // The queue is a static field on SelectiveKeepInv; clear between tests.
+        SelectiveKeepInv.clearStartupErrorsForTesting();
+    }
 
     private File configDir() throws Exception {
         return tempFolder.newFolder("cfg");
@@ -168,6 +176,82 @@ public class ConfigTest {
         assertEquals(10, c.offhandThreshold);
         assertEquals(11, c.helmetThreshold);
         assertTrue(c.skipSpectators);
+    }
+
+    @Test public void malformedYamlQueuesStartupError() throws Exception {
+        File dir = configDir();
+        writeYaml(dir, ": : : completely broken\n");
+
+        assertTrue("queue should be empty before load",
+                SelectiveKeepInv.snapshotStartupErrors().isEmpty());
+
+        Config.load(dir);
+
+        List<String> errs = SelectiveKeepInv.snapshotStartupErrors();
+        assertFalse("malformed config should append a startup error", errs.isEmpty());
+        // First entry should mention the file by name so the user knows where
+        // to look.
+        assertTrue("error should mention config.yml: " + errs.get(0),
+                errs.get(0).contains("config.yml"));
+    }
+
+    @Test public void validLoadDoesNotQueueAnError() throws Exception {
+        File dir = configDir();
+        writeYaml(dir, "thresholds:\n  offhand: 50\n");
+        Config.load(dir);
+        assertTrue(SelectiveKeepInv.snapshotStartupErrors().isEmpty());
+    }
+
+    // ---------------------------------------------------------------------
+    // B2: case-insensitive booleans + YAML aliases (yes/no/on/off)
+    // ---------------------------------------------------------------------
+
+    @Test public void capitalizedTrueParsesAsTrue() throws Exception {
+        File dir = configDir();
+        writeYaml(dir, "behavior:\n  skip-spectators: TRUE\n");
+        Config c = Config.load(dir);
+        assertTrue(c.skipSpectators);
+    }
+
+    @Test public void mixedCaseFalseParsesAsFalse() throws Exception {
+        File dir = configDir();
+        writeYaml(dir, "messages:\n  enabled: False\n");
+        Config c = Config.load(dir);
+        assertFalse(c.messagesEnabled);
+    }
+
+    @Test public void yamlYesNoOnOffAliases() throws Exception {
+        File dir = configDir();
+        writeYaml(dir,
+                "behavior:\n" +
+                "  skip-spectators: yes\n" +
+                "  all-mode-cancels-xp-drops: no\n" +
+                "messages:\n" +
+                "  enabled: On\n" +
+                "  show-xp-roll-flavor: OFF\n"
+        );
+        Config c = Config.load(dir);
+        assertTrue (c.skipSpectators);
+        assertFalse(c.allModeCancelsXpDrops);
+        assertTrue (c.messagesEnabled);
+        assertFalse(c.showXpRollFlavor);
+    }
+
+    // ---------------------------------------------------------------------
+    // B1: '#' inside a quoted config value must not be treated as a comment
+    // ---------------------------------------------------------------------
+
+    @Test public void hashInsideQuotedConfigValueIsPreserved() throws Exception {
+        // Not a realistic config value, but exercises the parser path: the
+        // value should round-trip with the '#' intact rather than being
+        // truncated mid-string.
+        File dir = configDir();
+        writeYaml(dir,
+                "thresholds:\n" +
+                "  offhand: 42 # trailing comment is still a comment\n"
+        );
+        Config c = Config.load(dir);
+        assertEquals(42, c.offhandThreshold);
     }
 
     @Test public void emptyFileFallsBackToDefaults() throws Exception {

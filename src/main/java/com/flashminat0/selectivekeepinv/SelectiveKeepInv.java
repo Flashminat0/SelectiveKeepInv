@@ -22,7 +22,7 @@ public class SelectiveKeepInv {
 
     public static final String MODID   = "selectivekeepinv";
     public static final String NAME    = "Selective Keep Inventory";
-    public static final String VERSION = "2.1";
+    public static final String VERSION = "2.2";
 
     /** Directory where we save the VIP list and config.yml. */
     public static File configDir;
@@ -50,6 +50,17 @@ public class SelectiveKeepInv {
     public static List<String> snapshotStartupErrors() {
         synchronized (startupErrors) {
             return Collections.unmodifiableList(new ArrayList<>(startupErrors));
+        }
+    }
+
+    /**
+     * Drain the queue. Package-private; only tests need to reset between
+     * cases. Runtime code never calls this (the queue is read-only after
+     * preInit).
+     */
+    static void clearStartupErrorsForTesting() {
+        synchronized (startupErrors) {
+            startupErrors.clear();
         }
     }
 

@@ -84,9 +84,10 @@ public class DeathMessageStore {
     public static DeathMessageStore fromFile(File file) throws InvalidDeathMessageFile {
         Map<String, List<String>> root;
         try (Reader r = new FileReader(file)) {
-            root = Config.SimpleYaml.parseLists(r);
+            root = SimpleYaml.parseLists(r);
         } catch (IOException e) {
-            throw new InvalidDeathMessageFile("could not read file: " + e.getMessage());
+            // parseLists throws IOException for both shape errors and real IO.
+            throw new InvalidDeathMessageFile(e.getMessage());
         } catch (Exception e) {
             throw new InvalidDeathMessageFile("malformed YAML: " + e.getMessage());
         }
@@ -114,9 +115,9 @@ public class DeathMessageStore {
             List<String> lines = root.get(section);
             for (int i = 0; i < lines.size(); i++) {
                 String line = lines.get(i);
-                if (line == null) {
+                if (line == null || line.trim().isEmpty()) {
                     throw new InvalidDeathMessageFile(
-                            "section '" + section + "' line " + (i + 1) + " is empty");
+                            "section '" + section + "' line " + (i + 1) + " is blank");
                 }
                 int s = countOccurrences(line, "%s");
                 int specifiers = countPercentSpecifiers(line);
