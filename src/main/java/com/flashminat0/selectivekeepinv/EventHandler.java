@@ -76,22 +76,23 @@ public class EventHandler {
     public void onDeath(LivingDeathEvent event) {
         if (!(event.getEntityLiving() instanceof EntityPlayerMP)) return;
         EntityPlayerMP player = (EntityPlayerMP) event.getEntityLiving();
+        Config cfg = SelectiveKeepInv.config;
         // Vanilla skips inventory drops entirely for spectators (they have no
         // inventory in the conventional sense). Mirror that: don't snapshot,
         // don't clear, don't queue a death message.
-        if (player.isSpectator()) return;
+        if (cfg.skipSpectators && player.isSpectator()) return;
 
         Mode mode = PlayerList.getMode(player.getUniqueID());
         if (mode == null) return;
 
         int xpLevel = Math.max(0, player.experienceLevel);
-        // Random divisor in {1, 2, 3} for the XP-carryover gamble at level >= 100.
-        // Rolled once per death so the value the player sees on respawn is
-        // deterministic from that point on.
-        int xpDivisor = 1 + RANDOM.nextInt(3);
+        // Random divisor uniformly in [divisorMin, divisorMax] for the
+        // XP-carryover gamble at level >= xpCarryoverThreshold. Rolled once
+        // per death so the value on respawn is deterministic from then on.
+        int xpDivisor = rollDivisor(cfg);
         PreservationPlan plan = (mode == Mode.ALL)
                 ? PreservationPlan.all(xpLevel)
-                : PreservationPlan.resolveDefault(xpLevel, xpDivisor);
+                : PreservationPlan.resolveDefault(xpLevel, xpDivisor, cfg);
 
         NBTTagCompound data = new NBTTagCompound();
         data.setString ("Mode",        mode.getName());
@@ -156,6 +157,7 @@ public class EventHandler {
     public void onXpDrop(LivingExperienceDropEvent event) {
         if (!(event.getEntityLiving() instanceof EntityPlayerMP)) return;
         EntityPlayerMP player = (EntityPlayerMP) event.getEntityLiving();
+        if (!SelectiveKeepInv.config.allModeCancelsXpDrops) return;
         if (PlayerList.getMode(player.getUniqueID()) == Mode.ALL) {
             event.setCanceled(true);
         }
@@ -236,6 +238,9 @@ public class EventHandler {
         NBTTagCompound msg = entityData.getCompoundTag(NBT_MSG_KEY);
         entityData.removeTag(NBT_MSG_KEY);
 
+        // Messages globally disabled: nothing more to do.
+        if (!SelectiveKeepInv.config.messagesEnabled) return;
+
         Mode mode = Mode.fromName(msg.getString("Mode"));
         int deathLevel = msg.getInteger("DeathLevel");
 
@@ -269,7 +274,7 @@ public class EventHandler {
             // there's no "lucky" or "brutal" outcome to describe; the line
             // would lie about the result.
             int xpRetainedForMsg = msg.getInteger("XpRetained");
-            if (xpRetainedForMsg > 0) {
+            if (SelectiveKeepInv.config.showXpRollFlavor && xpRetainedForMsg > 0) {
                 int divisor = msg.getInteger("XpDivisor");
                 String[] pool = (divisor <= 1) ? XP_ROLL_LUCKY
                               : (divisor == 2) ? XP_ROLL_MID
@@ -289,6 +294,17 @@ public class EventHandler {
     private static String randomFromTwo(String[] a, String[] b) {
         int idx = RANDOM.nextInt(a.length + b.length);
         return idx < a.length ? a[idx] : b[idx - a.length];
+    }
+
+    /**
+     * Roll the XP-carryover divisor uniformly in [cfg.divisorMin, cfg.divisorMax]
+     * inclusive. Clamps bounds defensively: if max &lt; min the value reverts
+     * to whichever clamp is sane (min, clamped >= 1).
+     */
+    private static int rollDivisor(Config cfg) {
+        int lo = Math.max(1, cfg.divisorMin);
+        int hi = Math.max(lo, cfg.divisorMax);
+        return lo + RANDOM.nextInt(hi - lo + 1);
     }
 
     // -----------------------------------------------------------------

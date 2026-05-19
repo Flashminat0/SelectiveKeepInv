@@ -6,7 +6,7 @@ package com.flashminat0.selectivekeepinv;
  * <ul>
  *   <li>{@link #DEFAULT}: XP-cost preservation. What gets kept is a function of
  *   the player's experience level at the moment of death. XP itself drops as
- *   orbs (vanilla behavior). See {@link PreservationPlan#resolveDefault(int, int)}.</li>
+ *   orbs (vanilla behavior). See {@link PreservationPlan#resolveDefault(int, int, Config)}.</li>
  *
  *   <li>{@link #ALL}: keep everything (full inventory, armor, offhand,
  *   accessories from Baubles + Trinkets, and full XP level). No cost.</li>

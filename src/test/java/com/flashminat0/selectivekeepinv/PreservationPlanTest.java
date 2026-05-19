@@ -9,7 +9,7 @@ import static org.junit.Assert.*;
  * the simpler {@link Mode#ALL} plan and the description renderer.
  *
  * <p>Most tests pass {@code xpDivisor = 1} to {@link
- * PreservationPlan#resolveDefault(int, int)} for predictability; the divisor
+ * PreservationPlan#resolveDefault(int, int, Config)} for predictability; the divisor
  * only affects XP carryover at level >= 100. A dedicated section below tests
  * each divisor value (1, 2, 3) and the input clamping.
  */
@@ -17,7 +17,17 @@ public class PreservationPlanTest {
 
     /** Convenience: most threshold tests don't care about the divisor. */
     private static PreservationPlan resolve(int xpLevel) {
-        return PreservationPlan.resolveDefault(xpLevel, 1);
+        return PreservationPlan.resolveDefault(xpLevel, 1, Config.defaults());
+    }
+
+    /** Resolve with a divisor and the default config. */
+    private static PreservationPlan resolve(int xpLevel, int divisor) {
+        return PreservationPlan.resolveDefault(xpLevel, divisor, Config.defaults());
+    }
+
+    /** Resolve with a custom config. */
+    private static PreservationPlan resolve(int xpLevel, int divisor, Config cfg) {
+        return PreservationPlan.resolveDefault(xpLevel, divisor, cfg);
     }
 
     // ---------------------------------------------------------------------
@@ -157,9 +167,9 @@ public class PreservationPlanTest {
 
     @Test public void xpRetainedZeroAt100Exactly() {
         // level 100 - 100 = 0, regardless of divisor
-        assertEquals(0, PreservationPlan.resolveDefault(100, 1).xpRetained);
-        assertEquals(0, PreservationPlan.resolveDefault(100, 2).xpRetained);
-        assertEquals(0, PreservationPlan.resolveDefault(100, 3).xpRetained);
+        assertEquals(0, resolve(100, 1).xpRetained);
+        assertEquals(0, resolve(100, 2).xpRetained);
+        assertEquals(0, resolve(100, 3).xpRetained);
     }
 
     // ---------------------------------------------------------------------
@@ -167,9 +177,9 @@ public class PreservationPlanTest {
     // ---------------------------------------------------------------------
 
     @Test public void divisor1KeepsAllLevelMinus100() {
-        assertEquals(50,  PreservationPlan.resolveDefault(150, 1).xpRetained);
-        assertEquals(100, PreservationPlan.resolveDefault(200, 1).xpRetained);
-        assertEquals(900, PreservationPlan.resolveDefault(1000, 1).xpRetained);
+        assertEquals(50,  resolve(150, 1).xpRetained);
+        assertEquals(100, resolve(200, 1).xpRetained);
+        assertEquals(900, resolve(1000, 1).xpRetained);
     }
 
     // ---------------------------------------------------------------------
@@ -177,9 +187,9 @@ public class PreservationPlanTest {
     // ---------------------------------------------------------------------
 
     @Test public void divisor2KeepsHalfLevelMinus100() {
-        assertEquals(25,  PreservationPlan.resolveDefault(150, 2).xpRetained);
-        assertEquals(50,  PreservationPlan.resolveDefault(200, 2).xpRetained);
-        assertEquals(450, PreservationPlan.resolveDefault(1000, 2).xpRetained);
+        assertEquals(25,  resolve(150, 2).xpRetained);
+        assertEquals(50,  resolve(200, 2).xpRetained);
+        assertEquals(450, resolve(1000, 2).xpRetained);
     }
 
     // ---------------------------------------------------------------------
@@ -188,22 +198,22 @@ public class PreservationPlanTest {
 
     @Test public void divisor3KeepsThirdLevelMinus100() {
         // integer division: (150-100)/3 = 16
-        assertEquals(16,  PreservationPlan.resolveDefault(150, 3).xpRetained);
-        assertEquals(33,  PreservationPlan.resolveDefault(200, 3).xpRetained);
-        assertEquals(300, PreservationPlan.resolveDefault(1000, 3).xpRetained);
+        assertEquals(16,  resolve(150, 3).xpRetained);
+        assertEquals(33,  resolve(200, 3).xpRetained);
+        assertEquals(300, resolve(1000, 3).xpRetained);
     }
 
     @Test public void divisorBelow1IsClampedTo1() {
         // (200 - 100) / 1 = 100, no matter what nonsense gets passed
-        assertEquals(100, PreservationPlan.resolveDefault(200, 0).xpRetained);
-        assertEquals(100, PreservationPlan.resolveDefault(200, -5).xpRetained);
+        assertEquals(100, resolve(200, 0).xpRetained);
+        assertEquals(100, resolve(200, -5).xpRetained);
     }
 
     @Test public void divisorIgnoredBelowThreshold() {
         // Below level 100, divisor doesn't matter (retained is always 0).
-        assertEquals(0, PreservationPlan.resolveDefault(50, 1).xpRetained);
-        assertEquals(0, PreservationPlan.resolveDefault(50, 2).xpRetained);
-        assertEquals(0, PreservationPlan.resolveDefault(50, 3).xpRetained);
+        assertEquals(0, resolve(50, 1).xpRetained);
+        assertEquals(0, resolve(50, 2).xpRetained);
+        assertEquals(0, resolve(50, 3).xpRetained);
     }
 
     // ---------------------------------------------------------------------
@@ -261,7 +271,7 @@ public class PreservationPlanTest {
     }
 
     @Test public void describeLevel150D1IncludesXpRetained() {
-        java.util.List<String> p = PreservationPlan.resolveDefault(150, 1).describeParts();
+        java.util.List<String> p = resolve(150, 1).describeParts();
         assertTrue(p.contains("50 XP retained"));
     }
 
@@ -271,5 +281,61 @@ public class PreservationPlanTest {
         assertTrue(p.contains("full armor"));
         assertTrue(p.contains("accessories"));
         assertTrue(p.contains("100 XP retained"));
+    }
+
+    // ---------------------------------------------------------------------
+    // Config-driven threshold tests
+    // ---------------------------------------------------------------------
+
+    @Test public void customOffhandThresholdPushesUnlock() {
+        Config cfg = Config.defaults();
+        cfg.offhandThreshold = 50;
+        assertFalse(resolve(20, 1, cfg).offhand);
+        assertFalse(resolve(49, 1, cfg).offhand);
+        assertTrue (resolve(50, 1, cfg).offhand);
+    }
+
+    @Test public void customArmorThresholdsRespectedIndependently() {
+        Config cfg = Config.defaults();
+        cfg.helmetThreshold     = 100;
+        cfg.chestplateThreshold = 200;
+        // At level 150: helmet yes, chestplate no
+        PreservationPlan p = resolve(150, 1, cfg);
+        assertTrue (p.helmet);
+        assertFalse(p.chestplate);
+    }
+
+    @Test public void hotbarPerSlot2DoublesHotbarCost() {
+        Config cfg = Config.defaults();
+        cfg.hotbarPerSlot = 2;
+        // 1 hotbar slot per 2 XP levels
+        assertEquals(0, resolve(1,  1, cfg).hotbarSlots);
+        assertEquals(1, resolve(2,  1, cfg).hotbarSlots);
+        assertEquals(2, resolve(4,  1, cfg).hotbarSlots);
+        assertEquals(4, resolve(9,  1, cfg).hotbarSlots);  // 9/2 = 4
+        assertEquals(9, resolve(18, 1, cfg).hotbarSlots);  // capped at 9
+    }
+
+    @Test public void hotbarPerSlotZeroClampedToOne() {
+        Config cfg = Config.defaults();
+        cfg.hotbarPerSlot = 0;
+        // Should behave like cost=1 (no divide by zero)
+        assertEquals(5, resolve(5, 1, cfg).hotbarSlots);
+    }
+
+    @Test public void carryoverThresholdMovesXpUnlockPoint() {
+        Config cfg = Config.defaults();
+        cfg.xpCarryoverThreshold = 200;
+        // At level 150 with threshold=200: no XP retained
+        assertEquals(0, resolve(150, 1, cfg).xpRetained);
+        // At level 250 with threshold=200, divisor=1: 50 XP retained
+        assertEquals(50, resolve(250, 1, cfg).xpRetained);
+    }
+
+    @Test public void disabledTierViaHighThreshold() {
+        Config cfg = Config.defaults();
+        // "Disable" accessories by pushing the threshold absurdly high
+        cfg.accessoriesThreshold = 9999;
+        assertFalse(resolve(500, 1, cfg).accessories);
     }
 }

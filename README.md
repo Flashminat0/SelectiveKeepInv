@@ -132,6 +132,51 @@ Editable by hand if the server is stopped. Unknown mode strings are dropped on
 load. Malformed JSON falls back to an empty list with a stack trace in the log
 rather than crashing.
 
+## Configuration (v2.0+)
+
+The threshold values described above are no longer hardcoded. They live in
+`config/selectivekeepinv/config.yml`, written automatically on first server
+start with the v1.1 defaults. Edit and restart the server to apply.
+
+```yaml
+thresholds:
+  hotbar-per-slot: 1          # XP cost per hotbar slot (leftmost first)
+  offhand:        10
+  helmet:         11
+  chestplate:     16
+  leggings:       21
+  boots:          26
+  accessories:    50
+  main-inventory: 100
+  xp-carryover:   100          # level at which the XP gamble begins
+
+xp-carryover:
+  divisor-min: 1               # set min = max = 1 to disable the gamble
+  divisor-max: 3
+
+behavior:
+  skip-spectators: true
+  all-mode-cancels-xp-drops: true
+
+messages:
+  enabled: true                # set false to suppress all mod chat output
+  show-xp-roll-flavor: true    # fourth-line XP-roll hint on respawn
+```
+
+Missing fields fall back to defaults silently (won't get a re-write). A
+malformed file logs a stack trace and falls back to defaults entirely so the
+mod still loads. Reload requires a server restart — there's no `/keepinv
+reload` yet.
+
+### Tuning tips
+
+- **Restore the v1.0 progression** (XP carryover only at level 200+) by
+  setting `xp-carryover: 200` and `main-inventory: 100` separately.
+- **Disable the XP gamble** with `divisor-min: 1, divisor-max: 1`.
+- **Effectively disable a tier** (e.g. don't preserve accessories at all)
+  by setting that threshold to something absurd like `9999`.
+- **Mute the death messages** entirely with `messages.enabled: false`.
+
 ## Build from source
 
 You need:

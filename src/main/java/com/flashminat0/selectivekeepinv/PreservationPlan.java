@@ -8,8 +8,8 @@ import java.util.List;
  *
  * <p>Two factory methods produce a plan:
  * <ul>
- *   <li>{@link #resolveDefault(int, int)} for {@link Mode#DEFAULT}: applies the
- *       XP-cost threshold table below.</li>
+ *   <li>{@link #resolveDefault(int, int, Config)} for {@link Mode#DEFAULT}:
+ *       applies the XP-cost threshold table below using {@link Config} values.</li>
  *   <li>{@link #all(int)} for {@link Mode#ALL}: preserves everything.</li>
  * </ul>
  *
@@ -75,24 +75,27 @@ public final class PreservationPlan {
     }
 
     /**
-     * Default-mode plan derived from the death XP level using the threshold table
-     * above. Negative xpLevel clamps to 0. The xpDivisor controls the XP
-     * carryover rate at level &gt;= 100; the caller rolls a random value in
-     * {1, 2, 3} per death. Divisors &lt; 1 are clamped to 1.
+     * Default-mode plan derived from the death XP level using the threshold
+     * table above. Thresholds come from the passed-in {@link Config}.
+     * Negative xpLevel clamps to 0. Divisors and {@code hotbarPerSlot} are
+     * clamped to {@code >= 1} to avoid divide-by-zero.
      */
-    public static PreservationPlan resolveDefault(int xpLevel, int xpDivisor) {
+    public static PreservationPlan resolveDefault(int xpLevel, int xpDivisor, Config cfg) {
         if (xpLevel <= 0) return empty();
         if (xpDivisor < 1) xpDivisor = 1;
+        int hotbarCost = Math.max(1, cfg.hotbarPerSlot);
 
-        int hotbar      = Math.min(xpLevel, 9);
-        boolean offh    = xpLevel >= 10;
-        boolean helmet  = xpLevel >= 11;
-        boolean chest   = xpLevel >= 16;
-        boolean legs    = xpLevel >= 21;
-        boolean boots   = xpLevel >= 26;
-        boolean accs    = xpLevel >= 50;
-        boolean mainInv = xpLevel >= 100;
-        int retained    = xpLevel >= 100 ? Math.max(0, (xpLevel - 100) / xpDivisor) : 0;
+        int hotbar      = Math.min(xpLevel / hotbarCost, 9);
+        boolean offh    = xpLevel >= cfg.offhandThreshold;
+        boolean helmet  = xpLevel >= cfg.helmetThreshold;
+        boolean chest   = xpLevel >= cfg.chestplateThreshold;
+        boolean legs    = xpLevel >= cfg.leggingsThreshold;
+        boolean boots   = xpLevel >= cfg.bootsThreshold;
+        boolean accs    = xpLevel >= cfg.accessoriesThreshold;
+        boolean mainInv = xpLevel >= cfg.mainInventoryThreshold;
+        int retained    = xpLevel >= cfg.xpCarryoverThreshold
+                ? Math.max(0, (xpLevel - cfg.xpCarryoverThreshold) / xpDivisor)
+                : 0;
 
         return new PreservationPlan(hotbar, offh, helmet, chest, legs, boots, accs, mainInv, retained);
     }
