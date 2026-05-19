@@ -1,0 +1,91 @@
+// Full build.gradle dropped over the Forge 1.12.2 MDK's stock one.
+// CI copies this file in place after extracting the MDK.
+
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net/' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:3.+'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'eclipse'
+apply plugin: 'maven-publish'
+
+version = project.findProperty('modVersion') ?: '1.0'
+group = 'com.flashminat0.selectivekeepinv'
+archivesBaseName = 'selectivekeepinv'
+
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
+
+minecraft {
+    mappings channel: 'snapshot', version: '20171003-1.12'
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
+            property 'forge.logging.console.level', 'debug'
+        }
+        server {
+            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
+            property 'forge.logging.console.level', 'debug'
+        }
+    }
+}
+
+repositories {
+    maven { url = 'https://www.cursemaven.com' }
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2860'
+
+    // Soft deps: Baubles (Azanor) and Trinkets and Baubles (XzeroAir).
+    // fg.deobf remaps the production jar to MCP names so our source compiles
+    // against it in the dev environment.
+    compile fg.deobf('curse.maven:baubles-227083:2518667')
+    compile fg.deobf('curse.maven:trinkets-and-baubles-279900:5717039')
+
+    testCompile 'junit:junit:4.13.2'
+}
+
+jar {
+    manifest {
+        attributes([
+            "Specification-Title"     : "selectivekeepinv",
+            "Specification-Vendor"    : "flashminat0",
+            "Specification-Version"   : "1",
+            "Implementation-Title"    : project.name,
+            "Implementation-Version"  : "${version}",
+            "Implementation-Vendor"   : "flashminat0",
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+jar.finalizedBy('reobfJar')
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file:///${project.projectDir}/mcmodsrepo"
+        }
+    }
+}
+
+test {
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+        exceptionFormat = 'full'
+    }
+}
