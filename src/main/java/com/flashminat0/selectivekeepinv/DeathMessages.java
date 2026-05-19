@@ -40,7 +40,12 @@ public final class DeathMessages {
             "Keeping loot doesn't undo the L.",
             "Your stuff is fine. Your skill is not.",
             "Congrats, you respawned a corpse with inventory.",
-            "Easy mode engaged. Are you proud?"
+            "Easy mode engaged. Are you proud?",
+            "Even with training wheels, you still fell over.",
+            "The mod saved you. Nothing else could have.",
+            "Survived death. Pride remains in critical condition.",
+            "Your gear has more dignity than you do.",
+            "Statistically you should not still be alive. The mod begs to differ."
     };
 
     /** ALL mode, deathLevel > 0. Extra flavor about the kept XP. */
@@ -90,7 +95,12 @@ public final class DeathMessages {
             "Get to walking, scrub. %s blocks.",
             "%s blocks. Maybe uninstall this time.",
             "%s blocks of cope ahead. Touch grass.",
-            "%s blocks. Try not to die again on the way back."
+            "%s blocks. Try not to die again on the way back.",
+            "%s blocks. Each step is your fault.",
+            "%s blocks of regret. Earn every one.",
+            "%s blocks. Future you is laughing at past you.",
+            "%s blocks to the monument of your failure.",
+            "%s blocks. Your friends saw the whole thing."
     };
 
     /** Died in a different dimension than the respawn point. Trolly++. */
@@ -116,7 +126,12 @@ public final class DeathMessages {
             "Imagine dying THERE. Couldn't be me.",
             "Different dimension, same skill issue.",
             "Loot evolved past you. Different reality and all.",
-            "Stuff's in another dimension. So is your competence."
+            "Stuff's in another dimension. So is your competence.",
+            "You died abroad. Your reputation died first.",
+            "Even the dimension didn't want you. The loot stays where it belongs.",
+            "Cross-dimensional embarrassment unlocked. Loot left behind.",
+            "Different dimension, same scrub. Loot stranded.",
+            "Wrong portal, wrong life. Loot's in the right place. You're not."
     };
 
     /**
