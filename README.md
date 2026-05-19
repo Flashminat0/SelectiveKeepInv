@@ -9,6 +9,23 @@ Server ops opt individual players into one of two preservation modes via
 `/keepinv`. Players not on the list die normally and drop items as usual
 (Corail Tombstone, vanilla, whatever you have handling drops).
 
+## Which version should I use?
+
+- **Don't want a config file?** Use [v1.1][rel-1.1]. Behavior is hardcoded to
+  the threshold table below, no `config.yml`, no `death-msgs.yml`. Stable,
+  small, nothing to tune.
+- **Want to tune thresholds / divisor range / messages, or use the latest
+  fixes?** Use the [latest release][rel-latest] (currently v2.x). The first
+  server start writes a `config.yml` you can edit; everything in there
+  defaults to the v1.1 hardcoded behavior, so it's a drop-in upgrade.
+
+Either way the command surface and mod ID are identical. Switching versions
+without changing config files is safe: v1.1 ignores any config files
+present, and v2.x falls back to its defaults if the file is missing.
+
+[rel-1.1]: https://github.com/Flashminat0/SelectiveKeepInv/releases/tag/v1.1
+[rel-latest]: https://github.com/Flashminat0/SelectiveKeepInv/releases/latest
+
 ## Commands
 
 All require op (permission level 2):
@@ -151,8 +168,18 @@ thresholds:
   xp-carryover:   100          # level at which the XP gamble begins
 
 xp-carryover:
-  divisor-min: 1               # set min = max = 1 to disable the gamble
+  divisor-min: 1               # set min = max to disable the gamble
   divisor-max: 3
+
+# The XP-roll flavor line on respawn (lucky / mid / brutal) is bucketed
+# from where your rolled divisor falls in [divisor-min, divisor-max]:
+#   quality = (max - divisor) / (max - min)
+#   >= 2/3 -> xp-roll-lucky
+#   >= 1/3 -> xp-roll-mid
+#   else   -> xp-roll-brutal
+# So widening divisor-max doesn't dump every roll into "brutal". You don't
+# need to add more pools; the existing three cover any range.
+# When divisor-min == divisor-max (no gamble), no flavor line is shown.
 
 behavior:
   skip-spectators: true

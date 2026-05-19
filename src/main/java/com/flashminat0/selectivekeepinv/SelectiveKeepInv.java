@@ -22,7 +22,7 @@ public class SelectiveKeepInv {
 
     public static final String MODID   = "selectivekeepinv";
     public static final String NAME    = "Selective Keep Inventory";
-    public static final String VERSION = "2.2";
+    public static final String VERSION = "2.3";
 
     /** Directory where we save the VIP list and config.yml. */
     public static File configDir;

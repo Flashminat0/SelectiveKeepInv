@@ -278,10 +278,10 @@ public class EventHandler {
             int xpRetainedForMsg = msg.getInteger("XpRetained");
             if (SelectiveKeepInv.config.showXpRollFlavor && xpRetainedForMsg > 0) {
                 int divisor = msg.getInteger("XpDivisor");
-                String[] pool = (divisor <= 1) ? msgs.xpRollLucky
-                              : (divisor == 2) ? msgs.xpRollMid
-                                               : msgs.xpRollBrutal;
-                sb.append("\n").append(TextFormatting.GRAY).append(randomFrom(pool));
+                String[] pool = selectXpRollPool(divisor, SelectiveKeepInv.config, msgs);
+                if (pool != null) {
+                    sb.append("\n").append(TextFormatting.GRAY).append(randomFrom(pool));
+                }
             }
         }
 
@@ -307,6 +307,38 @@ public class EventHandler {
         int lo = Math.max(1, cfg.divisorMin);
         int hi = Math.max(lo, cfg.divisorMax);
         return lo + RANDOM.nextInt(hi - lo + 1);
+    }
+
+    /**
+     * Pick which XP-roll flavor pool fits a divisor, by its position within
+     * the configured {@code [divisorMin, divisorMax]} range:
+     *
+     * <pre>
+     *   quality = (max - divisor) / (max - min)
+     *
+     *   quality &gt;= 2/3  -&gt; lucky pool
+     *   quality &gt;= 1/3  -&gt; mid pool
+     *   else             -&gt; brutal pool
+     * </pre>
+     *
+     * Returns {@code null} when {@code min == max} (the divisor is fixed, so
+     * there is no "luck" to flavor) or when the caller's range is degenerate
+     * after defensive clamping.
+     *
+     * <p>Defaults (range [1, 3]) keep the legacy mapping: 1=lucky, 2=mid,
+     * 3=brutal. Wider ranges spread divisors across the three buckets so
+     * widening {@code divisor-max} doesn't dump everything into "brutal".
+     *
+     * <p>Public for unit testing.
+     */
+    public static String[] selectXpRollPool(int divisor, Config cfg, DeathMessageStore msgs) {
+        int min = Math.max(1, cfg.divisorMin);
+        int max = Math.max(min, cfg.divisorMax);
+        if (max == min) return null;
+        double quality = (double) (max - divisor) / (double) (max - min);
+        if (quality >= 2.0 / 3.0) return msgs.xpRollLucky;
+        if (quality >= 1.0 / 3.0) return msgs.xpRollMid;
+        return msgs.xpRollBrutal;
     }
 
     // -----------------------------------------------------------------
