@@ -161,12 +161,70 @@ behavior:
 messages:
   enabled: true                # set false to suppress all mod chat output
   show-xp-roll-flavor: true    # fourth-line XP-roll hint on respawn
+  override-corny-msgs: false   # use death-msgs.yml instead of built-in pools
 ```
 
 Missing fields fall back to defaults silently (won't get a re-write). A
-malformed file logs a stack trace and falls back to defaults entirely so the
-mod still loads. Reload requires a server restart — there's no `/keepinv
-reload` yet.
+malformed file falls back to defaults entirely so the mod still loads, and
+a warning is broadcast to op players on next login (also logged to
+`latest.log` with a `[SelectiveKeepInv] WARN:` prefix). Reload requires a
+server restart — there's no `/keepinv reload` yet.
+
+### Custom death messages (v2.1+)
+
+Set `messages.override-corny-msgs: true` in `config.yml`, then restart.
+On first start with the flag enabled, the mod writes
+`config/selectivekeepinv/death-msgs.yml` with the built-in pools so you
+have a starting point. Edit, restart, done.
+
+The file has eight sections, each a list of strings:
+
+```yaml
+all-lines:
+  - "The reaper went home empty-handed."
+  - "..."
+
+all-lines-with-xp:           # extra praise when deathLevel > 0
+  - "Loot AND levels intact. Disgusting."
+
+all-lines-no-xp:             # extra mock for level-0 ALL deaths
+  - "Nothing to drop, nothing to lose. Tragic."
+
+same-dim-lines:              # %s is replaced with distance in blocks
+  - "Your funeral procession is %s blocks away."
+
+diff-dim-lines:              # used when respawn dimension != death dimension
+  - "Your stuff is in another dimension. Cry about it."
+
+xp-roll-lucky:               # divisor = 1
+  - "The XP gods smiled today."
+
+xp-roll-mid:                 # divisor = 2
+  - "The XP roll was meh."
+
+xp-roll-brutal:              # divisor = 3
+  - "Brutal XP roll. Ouch."
+```
+
+Validation rules:
+
+- All eight sections must be present.
+- No pool may be empty.
+- Every `same-dim-lines` entry must contain **exactly one** `%s` (and no
+  other `%X` format specifier).
+- No other pool may contain any `%X` format specifier.
+
+If validation fails for any reason (missing section, empty pool, wrong
+`%s` count, malformed YAML), the mod:
+
+1. Reverts `override-corny-msgs` to `false` for this run.
+2. Uses the built-in pools so nothing crashes.
+3. Logs a `[SelectiveKeepInv] WARN:` line to `latest.log` explaining
+   what's wrong (which section, which line number, what's expected).
+4. Broadcasts the same warning to op players when they log in, so it
+   surfaces even if you don't open the log.
+
+Fix the file and restart to re-enable custom messages.
 
 ### Tuning tips
 

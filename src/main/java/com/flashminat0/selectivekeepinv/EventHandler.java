@@ -14,11 +14,12 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent.PlayerLoggedInEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent.PlayerRespawnEvent;
 
+import java.util.List;
 import java.util.Random;
 
-import static com.flashminat0.selectivekeepinv.DeathMessages.*;
 
 /**
  * Mode-aware preservation.
@@ -250,13 +251,14 @@ public class EventHandler {
           .append(TextFormatting.YELLOW).append(deathLevel)
           .append(TextFormatting.GRAY).append(".\n");
 
+        DeathMessageStore msgs = SelectiveKeepInv.deathMessages;
         if (mode == Mode.ALL) {
-            String[] extra = (deathLevel > 0) ? ALL_LINES_WITH_XP : ALL_LINES_NO_XP;
-            sb.append(randomFromTwo(ALL_LINES, extra));
+            String[] extra = (deathLevel > 0) ? msgs.allLinesWithXp : msgs.allLinesNoXp;
+            sb.append(randomFromTwo(msgs.allLines, extra));
         } else {
             int deathDim = msg.getInteger("DeathDim");
             if (player.dimension != deathDim) {
-                sb.append(randomFrom(DIFF_DIM_LINES));
+                sb.append(randomFrom(msgs.diffDimLines));
             } else {
                 // Horizontal (XZ) distance: players walk, they don't fly. A
                 // 60-block-deep death right under the bed shouldn't read as
@@ -266,19 +268,19 @@ public class EventHandler {
                 int dist  = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
                 String coloredDist = TextFormatting.YELLOW + Integer.toString(dist)
                         + TextFormatting.GRAY;
-                sb.append(String.format(randomFrom(SAME_DIM_LINES), coloredDist));
+                sb.append(String.format(randomFrom(msgs.sameDimLines), coloredDist));
             }
 
             // Fourth line: XP-roll flavor, only when XP was actually retained.
-            // At deathLevel == 100 exactly, (100 - 100) / D = 0 for any D, so
-            // there's no "lucky" or "brutal" outcome to describe; the line
-            // would lie about the result.
+            // At deathLevel == xpCarryoverThreshold exactly, retained = 0 for
+            // any divisor, so there's no "lucky" or "brutal" outcome to
+            // describe; the line would lie about the result.
             int xpRetainedForMsg = msg.getInteger("XpRetained");
             if (SelectiveKeepInv.config.showXpRollFlavor && xpRetainedForMsg > 0) {
                 int divisor = msg.getInteger("XpDivisor");
-                String[] pool = (divisor <= 1) ? XP_ROLL_LUCKY
-                              : (divisor == 2) ? XP_ROLL_MID
-                                               : XP_ROLL_BRUTAL;
+                String[] pool = (divisor <= 1) ? msgs.xpRollLucky
+                              : (divisor == 2) ? msgs.xpRollMid
+                                               : msgs.xpRollBrutal;
                 sb.append("\n").append(TextFormatting.GRAY).append(randomFrom(pool));
             }
         }
@@ -305,6 +307,37 @@ public class EventHandler {
         int lo = Math.max(1, cfg.divisorMin);
         int hi = Math.max(lo, cfg.divisorMax);
         return lo + RANDOM.nextInt(hi - lo + 1);
+    }
+
+    // -----------------------------------------------------------------
+    // Login: broadcast queued startup errors to ops.
+    //
+    // The queue is populated during preInit by Config.load and the
+    // death-msgs override path. Anything in there means an admin should
+    // open latest.log or the config file. Surfacing it in-chat catches
+    // people who never look at the log.
+    // -----------------------------------------------------------------
+
+    @SubscribeEvent
+    public void onLogin(PlayerLoggedInEvent event) {
+        if (!(event.player instanceof EntityPlayerMP)) return;
+        EntityPlayerMP player = (EntityPlayerMP) event.player;
+
+        List<String> errors = SelectiveKeepInv.snapshotStartupErrors();
+        if (errors.isEmpty()) return;
+
+        // Only show to ops. canSendCommands is what CommandBase uses for the
+        // permission-level >= 2 check.
+        net.minecraft.server.MinecraftServer server = player.getServer();
+        if (server == null) return;
+        if (!server.getPlayerList().canSendCommands(player.getGameProfile())) return;
+
+        for (String err : errors) {
+            String line = TextFormatting.AQUA + "[SelectiveKeepInv] "
+                    + TextFormatting.RED + "Startup warning: "
+                    + TextFormatting.GRAY + err;
+            player.sendMessage(new TextComponentString(line));
+        }
     }
 
     // -----------------------------------------------------------------

@@ -1,7 +1,9 @@
 package com.flashminat0.selectivekeepinv;
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -59,6 +61,14 @@ public class Config {
 
     public boolean messagesEnabled  = true;
     public boolean showXpRollFlavor = true;
+    /**
+     * When true, the mod will export the built-in message pools to
+     * {@code death-msgs.yml} on first start (if not present) and load custom
+     * pools from that file. When false, the file is ignored entirely.
+     * If the file fails validation, this is reverted to false at runtime
+     * and a warning is queued for the next op login.
+     */
+    public boolean overrideCornyMsgs = false;
 
     // -----------------------------------------------------------------
     // I/O
@@ -90,8 +100,8 @@ public class Config {
             applySection(root.get("behavior"),     cfg::applyBehavior);
             applySection(root.get("messages"),     cfg::applyMessages);
         } catch (Exception e) {
-            System.err.println("[SelectiveKeepInv] Failed to load config.yml, using defaults:");
-            e.printStackTrace();
+            SelectiveKeepInv.reportStartupError("config.yml is malformed: " + e.getMessage()
+                    + ". Using built-in defaults. Fix the file and restart to apply your changes.");
             return new Config();
         }
         return cfg;
@@ -126,8 +136,9 @@ public class Config {
     }
 
     private void applyMessages(Map<String, Object> m) {
-        messagesEnabled  = asBool(m, "enabled",             messagesEnabled);
-        showXpRollFlavor = asBool(m, "show-xp-roll-flavor", showXpRollFlavor);
+        messagesEnabled    = asBool(m, "enabled",             messagesEnabled);
+        showXpRollFlavor   = asBool(m, "show-xp-roll-flavor", showXpRollFlavor);
+        overrideCornyMsgs  = asBool(m, "override-corny-msgs", overrideCornyMsgs);
     }
 
     private static int asInt(Map<String, Object> m, String key, int def) {
@@ -197,7 +208,18 @@ public class Config {
                 "\n" +
                 "  # If true, send a fourth line on respawn hinting at the XP roll\n" +
                 "  # outcome. Only shown when XP was actually retained.\n" +
-                "  show-xp-roll-flavor: true\n";
+                "  show-xp-roll-flavor: true\n" +
+                "\n" +
+                "  # If true, the mod writes its built-in message pools to\n" +
+                "  # death-msgs.yml (in this same folder) on first start, then\n" +
+                "  # loads custom pools from that file every start after.\n" +
+                "  # Edit death-msgs.yml to use your own lines.\n" +
+                "  #\n" +
+                "  # If the file is invalid (missing section, empty pool, wrong\n" +
+                "  # %s placeholders, malformed YAML, etc.) this flag is reverted\n" +
+                "  # to false at runtime, the built-in pools are used, and a\n" +
+                "  # warning is broadcast to op players on next login.\n" +
+                "  override-corny-msgs: false\n";
 
         try {
             File parent = f.getParentFile();
@@ -212,14 +234,24 @@ public class Config {
     }
 
     // -----------------------------------------------------------------
-    // Tiny YAML parser for our 2-level scalar schema.
+    // Tiny YAML parser for our 2-level schema.
     //
-    // Handles: comments (#), blank lines, top-level "key:" sections,
-    //          indented "key: value" pairs with int / bool / string values.
-    // Quoted strings: optional "..." or '...' wrapping is stripped.
+    // parse(): scalar key/value sections. Used by Config.
+    //   thresholds:
+    //     offhand: 10
+    //     helmet: 11
+    //
+    // parseLists(): list-of-strings sections. Used by DeathMessageStore.
+    //   same-dim-lines:
+    //     - "first line"
+    //     - "second line"
+    //
+    // Common features: # comments, blank lines, optional "..." / '...'
+    // wrapping on string values (stripped).
     // -----------------------------------------------------------------
     static class SimpleYaml {
 
+        /** Parse two-level scalar key/value sections. */
         static Map<String, Map<String, Object>> parse(Reader reader) throws IOException {
             Map<String, Map<String, Object>> root = new LinkedHashMap<>();
             Map<String, Object> currentSection = null;
@@ -246,8 +278,39 @@ public class Config {
             return root;
         }
 
+        /**
+         * Parse sections whose body is a list of string items (each line
+         * starts with a dash). Top-level "section:" headers followed by
+         * indented "- value" lines.
+         */
+        static Map<String, List<String>> parseLists(Reader reader) throws IOException {
+            Map<String, List<String>> root = new LinkedHashMap<>();
+            List<String> currentSection = null;
+            BufferedReader br = new BufferedReader(reader);
+            String raw;
+            while ((raw = br.readLine()) != null) {
+                String line = stripComment(raw);
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) continue;
+
+                boolean indented = line.length() > 0 && Character.isWhitespace(line.charAt(0));
+
+                if (!indented && trimmed.endsWith(":")) {
+                    String key = trimmed.substring(0, trimmed.length() - 1).trim();
+                    currentSection = new ArrayList<>();
+                    root.put(key, currentSection);
+                } else if (indented && trimmed.startsWith("- ")) {
+                    if (currentSection == null) continue;
+                    String value = trimmed.substring(2).trim();
+                    Object parsed = parseScalar(value);
+                    currentSection.add(parsed.toString());
+                }
+            }
+            return root;
+        }
+
         private static String stripComment(String s) {
-            // Naive: comments don't appear inside our values (no strings with #).
+            // Naive: # outside of values. Our values shouldn't carry '#'.
             int hash = s.indexOf('#');
             return hash < 0 ? s : s.substring(0, hash);
         }
